@@ -1,0 +1,54 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main # sync main branch codecov results
+  pull_request:
+    branches:
+      - main
+
+# cancel in-progress workflows in the same branch
+concurrency:
+  group: ${{ github.repository }}::${{ github.workflow }}::${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: read
+  packages: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Backend Image
+      run: docker compose build
+      # need to compile messages again because of how the code is mounting into Docker container
+    - name: Run Tests
+      run: docker compose run --rm backend pytest --cov --cov-branch --cov-report xml:'django.xml'
+    - name: Docker Login
+      uses: docker/login-action@v2.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Determine Image Name
+      run: |
+        OWNER=$(echo "${{ github.repository_owner }}")
+        IMAGE_NAME=$(echo "${{ github.repository }}" | sed -e "s,$OWNER/,,")
+        echo "IMAGE_TAG=ghcr.io/${{ github.repository }}/$IMAGE_NAME:${{ github.sha }}" >> "$GITHUB_ENV"
+    - name: Tag Docker image
+      run: docker tag backend $IMAGE_TAG
+    - name: Push Docker Image
+      run: docker push $IMAGE_TAG
+    - name: Upload Coverage To Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+        file: django.xml
+        flags: python

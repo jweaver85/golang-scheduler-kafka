@@ -1,0 +1,7 @@
+.git
+.github
+.idea
+.gitignore
+docker-compose.yaml
+Dockerfile
+bin/*

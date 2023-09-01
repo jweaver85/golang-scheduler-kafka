@@ -1,0 +1,49 @@
+name: Build Latest
+
+on:
+  push:
+    branches:
+      - main
+
+# cancel in-progress workflows in the same branch
+concurrency:
+  group: ${{ github.repository }}::${{ github.workflow }}::${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  checks: none
+  contents: read
+  deployments: none
+  id-token: none
+  issues: none
+  discussions: none
+  packages: write
+  pages: none
+  pull-requests: write
+  repository-projects: none
+  security-events: write
+  statuses: none
+
+jobs:
+  tag-and-push:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Backend Image
+      run: docker compose build
+    - name: Docker Login
+      uses: docker/login-action@v2.2.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Determine Image Name
+      run: |
+        OWNER=$(echo "${{ github.repository_owner }}")
+        IMAGE_NAME=$(echo "${{ github.repository }}" | sed -e "s,$OWNER/,,")
+        echo "IMAGE_TAG=ghcr.io/${{ github.repository }}/$IMAGE_NAME:latest" >> "$GITHUB_ENV"
+    - name: Tag Docker image
+      run: docker tag backend $IMAGE_TAG
+    - name: Push Docker Image
+      run: docker push $IMAGE_TAG
